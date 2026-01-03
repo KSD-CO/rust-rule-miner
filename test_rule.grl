@@ -1,0 +1,8 @@
+rule "TestRule" {
+    salience 100
+    when
+        ShoppingCart.items contains "Laptop"
+    then
+        Recommendation.items += "Mouse";
+        LogMessage("Test rule fired!");
+}

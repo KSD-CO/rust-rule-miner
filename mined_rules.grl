@@ -1,0 +1,30 @@
+// Auto-generated rules from pattern mining
+// Generated: 2026-01-02 15:16:01.555081 UTC
+// Total rules: 2
+
+// Rule #1: Laptop => Mouse
+// Confidence: 100.0% | Support: 71.4% | Lift: 1.40 | Conviction: inf
+// Interpretation: When Laptop present, Mouse appears 100.0% of the time
+rule "Mined_0_Laptop_Implies_Mouse" {
+    salience 100
+    no-loop
+    when
+        ShoppingCart.items contains "Laptop"
+    then
+        Recommendation.items += "Mouse";
+        LogMessage("Rule fired: Mined_0_Laptop_Implies_Mouse (confidence: 100.0%)");
+}
+
+// Rule #2: Mouse => Laptop
+// Confidence: 100.0% | Support: 71.4% | Lift: 1.40 | Conviction: inf
+// Interpretation: When Mouse present, Laptop appears 100.0% of the time
+rule "Mined_1_Mouse_Implies_Laptop" {
+    salience 100
+    no-loop
+    when
+        ShoppingCart.items contains "Mouse"
+    then
+        Recommendation.items += "Laptop";
+        LogMessage("Rule fired: Mined_1_Mouse_Implies_Laptop (confidence: 100.0%)");
+}
+
