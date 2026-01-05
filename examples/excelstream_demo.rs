@@ -34,6 +34,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // DataLoader::from_csv uses excelstream internally for streaming
+    // NOTE: For multi-field data, use DataLoader::from_csv_with_mapping() with ColumnMapping
+    // Example: DataLoader::from_csv_with_mapping(path, ColumnMapping::simple(0, 1, 5))
+    // See examples/04_load_from_excel_csv.rs for complete column mapping examples
     println!("Loading transactions...");
     let transactions = DataLoader::from_csv(csv_path)?;
     println!("Loaded {} transactions", transactions.len());

@@ -46,6 +46,7 @@ pub mod graph;
 
 // Data loading from Excel/CSV
 pub mod data_loader;
+pub use data_loader::ColumnMapping;
 
 // Rule engine integration
 #[cfg(feature = "engine")]

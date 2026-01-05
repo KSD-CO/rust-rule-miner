@@ -16,12 +16,18 @@ This update transforms `rust-rule-miner` from a simple mining library into a **c
    - Works for any domain: e-commerce, fraud detection, security, etc.
    - Preset configs: `shopping_cart()`, `transaction()`, `custom()`
 
-3. **PostgreSQL Streaming Support**
+3. **Column Mapping Configuration (NEW!)**
+   - Introduced `ColumnMapping` for flexible data loading
+   - Mine any columns from multi-field CSV/Excel files
+   - Support for single field or combined multi-field patterns
+   - No more Python preprocessing needed!
+
+4. **PostgreSQL Streaming Support**
    - New `postgres` feature flag with tokio-postgres
    - Stream data directly from database
    - Complete example with SQL schema and sample data
 
-4. **Helper Functions**
+5. **Helper Functions**
    - `facts_from_items(items, config)` - Generic helper
    - `facts_from_cart(items)` - Convenience for shopping
    - `facts_from_transaction(items)` - Convenience for transactions
@@ -39,15 +45,19 @@ This update transforms `rust-rule-miner` from a simple mining library into a **c
 - ✅ `ENGINE_INTEGRATION_SUMMARY.md` - This file
 
 ### Modified Files:
-- ✅ `Cargo.toml` - Added `engine` and `postgres` features
-- ✅ `src/lib.rs` - Export engine module
+- ✅ `Cargo.toml` - Added `engine` and `postgres` features, version 0.2.0
+- ✅ `src/lib.rs` - Export engine module and ColumnMapping
+- ✅ `src/data_loader.rs` - Added ColumnMapping and flexible loading methods
 - ✅ `src/export/grl.rs` - Added `GrlConfig` struct
 - ✅ `src/export/mod.rs` - Export `GrlConfig`
-- ✅ `examples/integration_with_engine.rs` - Added usage notes
-- ✅ `examples/integration_with_rete.rs` - Added GrlConfig notes
-- ✅ `examples/01_simple_ecommerce.rs` - Added notes
-- ✅ `examples/02_medium_complexity.rs` - Added notes
-- ✅ `examples/03_advanced_large_dataset.rs` - Added notes
+- ✅ `examples/integration_with_engine.rs` - Updated with current API
+- ✅ `examples/integration_with_rete.rs` - Added GrlConfig examples
+- ✅ `examples/04_load_from_excel_csv.rs` - Added ColumnMapping demonstration
+- ✅ `examples/01_simple_ecommerce.rs` - Updated documentation
+- ✅ `examples/02_medium_complexity.rs` - Updated documentation
+- ✅ `examples/03_advanced_large_dataset.rs` - Updated documentation
+- ✅ `README.md` - Updated with v0.2.0 features and ColumnMapping examples
+- ✅ `docs/INTEGRATION.md` - Updated integration examples
 
 ## Quick Start
 

@@ -67,6 +67,11 @@ let transactions = DataLoader::from_s3(
     0
 ).await?;
 
+// NOTE: For multi-field data, use ColumnMapping (v0.2.0+):
+// use rust_rule_miner::data_loader::ColumnMapping;
+// let mapping = ColumnMapping::multi_field(0, vec![1, 2], 5, \"::\".to_string());
+// let transactions = DataLoader::from_s3_with_mapping(..., mapping).await?;
+
 // 2. Mine patterns
 let mut miner = RuleMiner::new(MiningConfig {{
     min_support: 0.05,

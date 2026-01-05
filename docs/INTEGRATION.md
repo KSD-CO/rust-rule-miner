@@ -42,24 +42,27 @@ impl RecommendationSystem {
         let transactions = DataLoader::from_csv(csv_path)?;
         println!("✓ Loaded {} transactions", transactions.len());
 
-        // STEP 2: Mine association rules
+        // STEP 2: Mine association rules with quality criteria
+        // This is where you set min_support, min_confidence, min_lift
+        // Only rules meeting these thresholds will be mined
         println!("Mining association rules...");
         let config = MiningConfig {
-            min_support: 0.05,
-            min_confidence: 0.60,
-            min_lift: 1.5,
+            min_support: 0.05,      // Only patterns in 5%+ of transactions
+            min_confidence: 0.60,   // Only rules with 60%+ confidence
+            min_lift: 1.5,          // Only rules 50% better than random
             ..Default::default()
         };
 
         let mut miner = RuleMiner::new(config);
         miner.add_transactions(transactions)?;
-        let rules = miner.mine_association_rules()?;
-        println!("✓ Mined {} rules", rules.len());
+        let rules = miner.mine_association_rules()?;  // ← Rules filtered by criteria
+        println!("✓ Mined {} rules (filtered by quality thresholds)", rules.len());
 
-        // STEP 3: Load into engine (automatic GRL conversion!)
+        // STEP 3: Load filtered rules into engine
+        // Engine executes the pre-filtered rules (no additional filtering here)
         println!("Loading rules into engine...");
         let mut engine = MiningRuleEngine::new("ProductRecommendations");
-        engine.load_rules(&rules)?;
+        engine.load_rules(&rules)?;  // ← Only loads high-quality rules from step 2
         println!("✓ Engine ready with {} rules", rules.len());
 
         Ok(Self { engine, rules })

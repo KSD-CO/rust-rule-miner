@@ -3,12 +3,52 @@
 //! This module provides direct integration with rust-rule-engine, allowing
 //! mined rules to be executed in real-time without intermediate steps.
 //!
+//! # Two-Phase Architecture
+//!
+//! The integration uses a two-phase approach:
+//!
+//! 1. **Mining Phase** (`RuleMiner`): Apply quality criteria (min_support, min_confidence, min_lift)
+//!    to filter and extract only high-quality rules from historical data.
+//!
+//! 2. **Execution Phase** (`MiningRuleEngine`): Execute the pre-filtered rules in real-time.
+//!    No additional filtering is done here - the engine executes all loaded rules.
+//!
+//! **Important**: Mining criteria are configured in `MiningConfig` and applied during
+//! `mine_association_rules()`, not during engine execution.
+//!
 //! # Features
 //!
 //! - Direct conversion of mined rules to executable rules
 //! - Real-time rule execution with Facts
 //! - Seamless integration with mining pipeline
 //! - Support for both Native and RETE engines
+//! - Configurable field names via `GrlConfig`
+//!
+//! # Example
+//!
+//! ```rust,ignore
+//! use rust_rule_miner::{RuleMiner, MiningConfig, Transaction};
+//! use rust_rule_miner::engine::{MiningRuleEngine, facts_from_cart};
+//!
+//! // PHASE 1: Mine rules with quality criteria
+//! let config = MiningConfig {
+//!     min_support: 0.3,        // Filter: must appear in 30%+ transactions
+//!     min_confidence: 0.7,     // Filter: must be correct 70%+ of time
+//!     min_lift: 1.2,           // Filter: must be 20%+ better than random
+//!     ..Default::default()
+//! };
+//!
+//! let mut miner = RuleMiner::new(config);
+//! miner.add_transactions(transactions)?;
+//! let rules = miner.mine_association_rules()?;  // ← Filtered by criteria
+//!
+//! // PHASE 2: Execute filtered rules in real-time
+//! let mut engine = MiningRuleEngine::new("Recommendations");
+//! engine.load_rules(&rules)?;  // ← Only loads pre-filtered rules
+//!
+//! let facts = facts_from_cart(vec!["Laptop".to_string()]);
+//! let result = engine.execute(&facts)?;
+//! ```
 
 #[cfg(feature = "engine")]
 use rust_rule_engine::{Facts, GRLParser, KnowledgeBase, RustRuleEngine, Value};

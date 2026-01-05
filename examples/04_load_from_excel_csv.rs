@@ -1,23 +1,31 @@
 //! Example 4: Loading Data from Excel and CSV Files
 //!
 //! Demonstrates loading transaction data from files using excelstream.
+//! New in v0.2.0: Flexible column mapping for multi-field data.
 //! Use case: Import historical sales data for pattern mining.
 
-use rust_rule_miner::{data_loader::DataLoader, MiningConfig, RuleMiner};
+use rust_rule_miner::{
+    data_loader::{ColumnMapping, DataLoader},
+    MiningConfig, RuleMiner,
+};
 use std::fs;
 use std::io::Write;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== Example 4: Loading Data from Excel/CSV ===\n");
 
-    // Create sample CSV file
+    // Create sample CSV files
     create_sample_csv()?;
+    create_multi_field_csv()?;
 
-    // Demo 1: Load from CSV
+    // Demo 1: Load from CSV (standard format)
     demo_csv_loading()?;
 
     // Demo 2: Mine rules from CSV data
     demo_csv_mining()?;
+
+    // Demo 3: Load multi-field CSV with ColumnMapping (v0.2.0+)
+    demo_column_mapping()?;
 
     // Cleanup
     cleanup_temp_files();
@@ -160,9 +168,123 @@ fn demo_csv_mining() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+fn create_multi_field_csv() -> Result<(), Box<dyn std::error::Error>> {
+    println!("--- Creating Multi-Field CSV File ---");
+
+    let csv_content = r#"customer_id,product_name,category,price,location,timestamp
+C001,Laptop,Electronics,1200,US,2024-01-01T10:00:00Z
+C001,Mouse,Accessories,25,US,2024-01-01T10:00:00Z
+C002,Laptop,Electronics,1200,UK,2024-01-01T11:00:00Z
+C002,Keyboard,Accessories,75,UK,2024-01-01T11:00:00Z
+C003,Phone,Electronics,800,US,2024-01-02T09:00:00Z
+C003,Phone Case,Accessories,20,US,2024-01-02T09:00:00Z
+C004,Tablet,Electronics,600,UK,2024-01-02T10:00:00Z
+C004,Tablet Case,Accessories,30,UK,2024-01-02T10:00:00Z
+C005,Monitor,Electronics,300,US,2024-01-03T08:00:00Z
+C005,HDMI Cable,Accessories,15,US,2024-01-03T08:00:00Z
+"#;
+
+    let file_path = "/tmp/multi_field_sales.csv";
+    let mut file = fs::File::create(file_path)?;
+    file.write_all(csv_content.as_bytes())?;
+
+    println!("✓ Created: {}", file_path);
+    println!("  CSV with columns: customer_id, product_name, category, price, location, timestamp");
+    println!();
+
+    Ok(())
+}
+
+fn demo_column_mapping() -> Result<(), Box<dyn std::error::Error>> {
+    println!("--- Demo 3: Column Mapping (v0.2.0+) ---");
+    println!("CSV columns: customer_id, product_name, category, price, location, timestamp");
+    println!("             0            1             2         3      4         5");
+    println!();
+
+    let file_path = "/tmp/multi_field_sales.csv";
+
+    // OPTION 1: Mine by product names only
+    println!("Option 1: Mine by Product Names (column 1)");
+    let mapping = ColumnMapping::simple(0, 1, 5);
+    let transactions = DataLoader::from_csv_with_mapping(file_path, mapping)?;
+
+    println!("✓ Loaded {} customer transactions", transactions.len());
+    println!("Sample items: {}", transactions[0].items.join(", "));
+    println!();
+
+    // OPTION 2: Mine by categories only
+    println!("Option 2: Mine by Categories (column 2)");
+    let mapping = ColumnMapping::simple(0, 2, 5);
+    let transactions = DataLoader::from_csv_with_mapping(file_path, mapping)?;
+
+    println!("✓ Loaded {} customer transactions", transactions.len());
+    println!("Sample items: {}", transactions[0].items.join(", "));
+    println!();
+
+    // OPTION 3: Mine by product + category combined
+    println!("Option 3: Mine by Product::Category (columns 1+2)");
+    let mapping = ColumnMapping::multi_field(
+        0,                // customer_id
+        vec![1, 2],       // product_name + category
+        5,                // timestamp
+        "::".to_string(), // separator
+    );
+    let transactions = DataLoader::from_csv_with_mapping(file_path, mapping)?;
+
+    println!("✓ Loaded {} customer transactions", transactions.len());
+    println!("Sample items: {}", transactions[0].items.join(", "));
+    println!();
+
+    // OPTION 4: Mine by product + category + location
+    println!("Option 4: Mine by Product::Category::Location (columns 1+2+4)");
+    let mapping = ColumnMapping::multi_field(
+        0,             // customer_id
+        vec![1, 2, 4], // product + category + location
+        5,             // timestamp
+        "::".to_string(),
+    );
+    let transactions = DataLoader::from_csv_with_mapping(file_path, mapping)?;
+
+    println!("✓ Loaded {} customer transactions", transactions.len());
+    println!("Sample items: {}", transactions[0].items.join(", "));
+    println!();
+
+    // Mine rules from product+category patterns
+    println!("Mining rules from Product::Category patterns...");
+    let mapping = ColumnMapping::multi_field(0, vec![1, 2], 5, "::".to_string());
+    let transactions = DataLoader::from_csv_with_mapping(file_path, mapping)?;
+
+    let config = MiningConfig {
+        min_support: 0.3,
+        min_confidence: 0.7,
+        ..Default::default()
+    };
+
+    let mut miner = RuleMiner::new(config);
+    miner.add_transactions(transactions)?;
+    let rules = miner.mine_association_rules()?;
+
+    println!("✓ Found {} rules with combined patterns", rules.len());
+    if !rules.is_empty() {
+        for (idx, rule) in rules.iter().take(3).enumerate() {
+            println!(
+                "{}. {:?} => {:?}",
+                idx + 1,
+                rule.antecedent,
+                rule.consequent
+            );
+            println!("   Confidence: {:.1}%", rule.metrics.confidence * 100.0);
+        }
+    }
+    println!();
+
+    Ok(())
+}
+
 fn cleanup_temp_files() {
     println!("--- Cleanup ---");
     fs::remove_file("/tmp/sample_transactions.csv").ok();
+    fs::remove_file("/tmp/multi_field_sales.csv").ok();
     fs::remove_file("/tmp/csv_mined_rules.grl").ok();
     println!("✓ Temporary files removed");
 }

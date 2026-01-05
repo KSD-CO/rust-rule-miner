@@ -102,14 +102,65 @@ miner.add_transactions(transactions)?;
 let rules = miner.mine_association_rules()?;
 ```
 
-**Expected file format:**
+**Required file format (columns must be in this order):**
 ```csv
 transaction_id,items,timestamp
 tx001,"Laptop,Mouse,Keyboard",2024-01-01T10:00:00Z
 tx002,"Phone,Phone Case",2024-01-02T11:30:00Z
 ```
 
+- **Column 0**: Transaction/Group ID
+- **Column 1**: Items (comma-separated values to mine)
+- **Column 2**: Timestamp (ISO 8601, Unix timestamp, or datetime string)
+
 **Memory usage:** ~3-35 MB regardless of file size! 🚀
+
+### Mining Different Fields (New in v0.2.1!)
+
+**No preprocessing needed!** Use `ColumnMapping` to mine any fields directly:
+
+```rust
+use rust_rule_miner::data_loader::{DataLoader, ColumnMapping};
+
+// CSV: customer_id, product_name, category, price, location, timestamp
+//      0            1             2         3      4         5
+
+// Option 1: Mine product names (column 1)
+let mapping = ColumnMapping::simple(0, 1, 5);
+let transactions = DataLoader::from_csv_with_mapping("sales.csv", mapping)?;
+
+// Option 2: Mine categories (column 2)
+let mapping = ColumnMapping::simple(0, 2, 5);
+let transactions = DataLoader::from_csv_with_mapping("sales.csv", mapping)?;
+
+// Option 3: Mine product + category combined
+let mapping = ColumnMapping::multi_field(
+    0,                  // transaction_id column
+    vec![1, 2],         // product(1) + category(2)
+    5,                  // timestamp column
+    "::".to_string()    // separator
+);
+let transactions = DataLoader::from_csv_with_mapping("sales.csv", mapping)?;
+// Items: "Laptop::Electronics", "Mouse::Accessories"
+
+// Option 4: Mine product + category + location
+let mapping = ColumnMapping::multi_field(0, vec![1, 2, 4], 5, "::".to_string());
+let transactions = DataLoader::from_csv_with_mapping("sales.csv", mapping)?;
+// Items: "Laptop::Electronics::US", "Mouse::Accessories::UK"
+```
+
+**Multi-field zipping:** If your CSV has comma-separated values in multiple columns:
+
+```csv
+customer_id,products,categories,locations,timestamp
+123,"Laptop,Mouse","Electronics,Accessories","US,US",2024-01-01
+```
+
+The miner will automatically zip them together:
+```rust
+let mapping = ColumnMapping::multi_field(0, vec![1, 2, 3], 4, "::".to_string());
+// Result: ["Laptop::Electronics::US", "Mouse::Accessories::US"]
+```
 
 ---
 
@@ -165,21 +216,32 @@ let sequential_patterns = miner.find_sequential_patterns()?;
 
 ## 🎨 Engine Integration (New in v0.2!)
 
-Execute mined rules in real-time with integrated engine support:
+Execute mined rules in real-time with integrated engine support.
+
+**Two-Phase Approach:**
+1. **Mining Phase**: Apply quality criteria (min_support, min_confidence, min_lift) to filter rules
+2. **Execution Phase**: Execute pre-filtered high-quality rules in real-time
 
 ```rust
 use rust_rule_miner::engine::{MiningRuleEngine, facts_from_cart};
 
-// 1. Mine rules (as usual)
+// PHASE 1: Mine rules with quality criteria
+let config = MiningConfig {
+    min_support: 0.3,       // Pattern must appear in 30%+ of transactions
+    min_confidence: 0.7,    // Rule must be correct 70%+ of the time
+    min_lift: 1.2,          // Rule must be 20%+ better than random
+    ..Default::default()
+};
+
 let mut miner = RuleMiner::new(config);
 miner.add_transactions(transactions)?;
-let rules = miner.mine_association_rules()?;
+let rules = miner.mine_association_rules()?;  // ← Only high-quality rules
 
-// 2. Load into engine (one line!)
+// PHASE 2: Load filtered rules into engine and execute
 let mut engine = MiningRuleEngine::new("ProductRecommendations");
-engine.load_rules(&rules)?;
+engine.load_rules(&rules)?;  // ← Loads only the filtered rules from Phase 1
 
-// 3. Execute in real-time
+// Execute in real-time
 let facts = facts_from_cart(vec!["Laptop".to_string()]);
 let result = engine.execute(&facts)?;
 
@@ -187,6 +249,8 @@ if let Some(recommendations) = result.get("Recommendation.items") {
     println!("Recommend: {:?}", recommendations);  // ["Mouse", "Keyboard"]
 }
 ```
+
+**Key Point**: Mining criteria are applied during `mine_association_rules()`, not during execution. The engine only executes pre-filtered high-quality rules.
 
 ### Flexible GRL Export for Any Domain
 
@@ -330,6 +394,7 @@ See [examples/](examples/) directory:
 - [x] PostgreSQL streaming support
 - [x] Multi-domain support (e-commerce, fraud, security)
 - [x] Excel/CSV data loading
+- [x] **Column mapping configuration** - Select and combine fields from multi-column data
 
 **Planned:**
 - [ ] FP-Growth algorithm optimization
