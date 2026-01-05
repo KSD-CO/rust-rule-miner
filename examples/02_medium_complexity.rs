@@ -2,6 +2,8 @@
 //!
 //! Demonstrates mining with more diverse dataset.
 //! Use case: Cross-category recommendations.
+//!
+//! NOTE: For custom field names, see GrlConfig in examples/flexible_domain_mining.rs
 
 use chrono::Utc;
 use rust_rule_engine::rete::{

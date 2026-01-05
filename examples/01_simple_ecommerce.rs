@@ -2,6 +2,13 @@
 //!
 //! Demonstrates basic rule mining from small dataset.
 //! Use case: Product recommendations based on purchase history.
+//!
+//! NOTE: For custom field names beyond ShoppingCart.items, use GrlConfig:
+//!   use rust_rule_miner::export::GrlConfig;
+//!   let config = GrlConfig::custom("Order.items", "Suggestions.products");
+//!   let grl = GrlExporter::to_grl_with_config(&rules, &config);
+//!
+//! See examples/flexible_domain_mining.rs for more domains.
 
 use chrono::Utc;
 use rust_rule_engine::rete::{

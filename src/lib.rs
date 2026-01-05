@@ -47,6 +47,10 @@ pub mod graph;
 // Data loading from Excel/CSV
 pub mod data_loader;
 
+// Rule engine integration
+#[cfg(feature = "engine")]
+pub mod engine;
+
 // Re-exports
 pub use config::{MiningAlgorithm, MiningConfig};
 pub use errors::{MiningError, Result};

@@ -1,3 +1,3 @@
 pub mod grl;
 
-pub use grl::GrlExporter;
+pub use grl::{GrlConfig, GrlExporter};

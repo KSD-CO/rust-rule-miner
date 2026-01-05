@@ -17,18 +17,20 @@ Complete guide for integrating rust-rule-miner with rust-rule-engine and other s
 
 ## rust-rule-engine Integration
 
-### Complete E-commerce Recommendation System
+### Complete E-commerce Recommendation System (Simple API - v0.2.0+)
+
+**Using the new `MiningRuleEngine` wrapper for simple integration:**
 
 ```rust
-use rust_rule_miner::{RuleMiner, MiningConfig, data_loader::DataLoader};
-use rust_rule_miner::export::GrlExporter;
-use rust_rule_engine::rete::{IncrementalEngine, TypedFacts, FactValue};
-use rust_rule_engine::rete::grl_loader::GrlReteLoader;
-use std::fs;
+use rust_rule_miner::{
+    RuleMiner, MiningConfig,
+    data_loader::DataLoader,
+    engine::{MiningRuleEngine, facts_from_cart},
+};
 
-/// Complete workflow: Historical Data → Rule Mining → GRL → RETE → Recommendations
+/// Complete workflow: Historical Data → Rule Mining → Engine → Recommendations
 pub struct RecommendationSystem {
-    engine: IncrementalEngine,
+    engine: MiningRuleEngine,
     rules: Vec<rust_rule_miner::types::AssociationRule>,
 }
 
@@ -48,22 +50,16 @@ impl RecommendationSystem {
             min_lift: 1.5,
             ..Default::default()
         };
-        
+
         let mut miner = RuleMiner::new(config);
         miner.add_transactions(transactions)?;
         let rules = miner.mine_association_rules()?;
         println!("✓ Mined {} rules", rules.len());
 
-        // STEP 3: Export to GRL
-        println!("Generating GRL code...");
-        let grl = GrlExporter::to_grl(&rules);
-        fs::write("recommendations.grl", &grl)?;
-        println!("✓ Saved to recommendations.grl");
-
-        // STEP 4: Load into RETE engine
-        println!("Loading rules into RETE engine...");
-        let mut engine = IncrementalEngine::new();
-        GrlReteLoader::load_from_string(&grl, &mut engine)?;
+        // STEP 3: Load into engine (automatic GRL conversion!)
+        println!("Loading rules into engine...");
+        let mut engine = MiningRuleEngine::new("ProductRecommendations");
+        engine.load_rules(&rules)?;
         println!("✓ Engine ready with {} rules", rules.len());
 
         Ok(Self { engine, rules })
@@ -71,24 +67,15 @@ impl RecommendationSystem {
 
     /// Get recommendations for a shopping cart
     pub fn recommend(&mut self, cart_items: Vec<String>) -> Vec<String> {
-        // Create facts
-        let mut facts = TypedFacts::new();
-        facts.set("ShoppingCart.items", FactValue::Array(
-            cart_items.iter()
-                .map(|s| FactValue::String(s.clone()))
-                .collect()
-        ));
-        facts.set("Recommendation.items", FactValue::Array(vec![]));
-
-        // Insert facts and fire rules
-        self.engine.insert_typed_facts("ShoppingCart", facts.clone());
-        self.engine.fire_all(&mut facts, 10);
+        // Create facts and execute
+        let facts = facts_from_cart(cart_items);
+        let result = self.engine.execute(&facts).unwrap();
 
         // Extract recommendations
-        if let Some(FactValue::Array(recs)) = facts.get("Recommendation.items") {
+        if let Some(rust_rule_engine::Value::Array(recs)) = result.get("Recommendation.items") {
             recs.iter()
                 .filter_map(|v| match v {
-                    FactValue::String(s) => Some(s.clone()),
+                    rust_rule_engine::Value::String(s) => Some(s.clone()),
                     _ => None,
                 })
                 .collect()
@@ -120,23 +107,88 @@ pub struct RuleStats {
 // Usage
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut system = RecommendationSystem::from_csv("sales_history.csv")?;
-    
+
     let recommendations = system.recommend(vec![
         "Laptop".to_string(),
         "Monitor".to_string(),
     ]);
-    
+
     println!("Recommendations: {:?}", recommendations);
-    
+
     let stats = system.stats();
     println!("System Stats:");
     println!("  Total Rules: {}", stats.total_rules);
     println!("  Avg Confidence: {:.1}%", stats.avg_confidence * 100.0);
     println!("  Avg Lift: {:.2}", stats.avg_lift);
-    
+
     Ok(())
 }
 ```
+
+### Advanced: RETE Engine for High Performance
+
+**For systems with many rules (>100), use the RETE engine directly:**
+
+```rust
+use rust_rule_miner::{RuleMiner, MiningConfig, data_loader::DataLoader};
+use rust_rule_miner::export::{GrlExporter, GrlConfig};
+use rust_rule_engine::rete::{IncrementalEngine, TypedFacts, FactValue};
+use rust_rule_engine::rete::grl_loader::GrlReteLoader;
+
+pub struct HighPerformanceRecommendationSystem {
+    engine: IncrementalEngine,
+    rules: Vec<rust_rule_miner::types::AssociationRule>,
+}
+
+impl HighPerformanceRecommendationSystem {
+    pub fn from_csv(csv_path: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        // Load and mine
+        let transactions = DataLoader::from_csv(csv_path)?;
+        let mut miner = RuleMiner::new(MiningConfig::default());
+        miner.add_transactions(transactions)?;
+        let rules = miner.mine_association_rules()?;
+
+        // Generate GRL with custom config
+        let grl_config = GrlConfig::custom("Cart.products", "Recommendations.items");
+        let grl = GrlExporter::to_grl_with_config(&rules, &grl_config);
+
+        // Load into RETE engine
+        let mut engine = IncrementalEngine::new();
+        GrlReteLoader::load_from_string(&grl, &mut engine)?;
+
+        Ok(Self { engine, rules })
+    }
+
+    pub fn recommend(&mut self, cart_items: Vec<String>) -> Vec<String> {
+        let mut facts = TypedFacts::new();
+        facts.set("Cart.products", FactValue::Array(
+            cart_items.iter()
+                .map(|s| FactValue::String(s.clone()))
+                .collect()
+        ));
+        facts.set("Recommendations.items", FactValue::Array(vec![]));
+
+        self.engine.insert_typed_facts("Cart", facts.clone());
+        self.engine.fire_all(&mut facts, 10);
+
+        if let Some(FactValue::Array(recs)) = facts.get("Recommendations.items") {
+            recs.iter()
+                .filter_map(|v| match v {
+                    FactValue::String(s) => Some(s.clone()),
+                    _ => None,
+                })
+                .collect()
+        } else {
+            vec![]
+        }
+    }
+}
+```
+
+**See also:**
+- [examples/integration_with_engine.rs](../examples/integration_with_engine.rs) - Simple engine integration
+- [examples/integration_with_rete.rs](../examples/integration_with_rete.rs) - RETE engine for performance
+- [examples/flexible_domain_mining.rs](../examples/flexible_domain_mining.rs) - Multi-domain examples
 
 ---
 

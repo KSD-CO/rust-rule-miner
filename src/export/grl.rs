@@ -1,23 +1,76 @@
 use crate::types::AssociationRule;
 use chrono::Utc;
 
+/// Configuration for GRL export
+#[derive(Debug, Clone)]
+pub struct GrlConfig {
+    /// Field name for input items (e.g., "ShoppingCart.items", "Transaction.items")
+    pub input_field: String,
+    /// Field name for output/recommendation items (e.g., "Recommendation.items", "Suggestions.items")
+    pub output_field: String,
+}
+
+impl Default for GrlConfig {
+    fn default() -> Self {
+        Self {
+            input_field: "ShoppingCart.items".to_string(),
+            output_field: "Recommendation.items".to_string(),
+        }
+    }
+}
+
+impl GrlConfig {
+    /// Create a new GRL configuration
+    pub fn new(input_field: impl Into<String>, output_field: impl Into<String>) -> Self {
+        Self {
+            input_field: input_field.into(),
+            output_field: output_field.into(),
+        }
+    }
+
+    /// Create config for shopping cart recommendations
+    pub fn shopping_cart() -> Self {
+        Self::default()
+    }
+
+    /// Create config for transaction analysis
+    pub fn transaction() -> Self {
+        Self {
+            input_field: "Transaction.items".to_string(),
+            output_field: "Analysis.recommendations".to_string(),
+        }
+    }
+
+    /// Create config for custom fields
+    pub fn custom(input_field: impl Into<String>, output_field: impl Into<String>) -> Self {
+        Self::new(input_field, output_field)
+    }
+}
+
 /// Export association rules to GRL (Grule Rule Language) format
 pub struct GrlExporter;
 
 impl GrlExporter {
-    /// Convert association rules to GRL code
+    /// Convert association rules to GRL code (uses default config)
     pub fn to_grl(rules: &[AssociationRule]) -> String {
+        Self::to_grl_with_config(rules, &GrlConfig::default())
+    }
+
+    /// Convert association rules to GRL code with custom configuration
+    pub fn to_grl_with_config(rules: &[AssociationRule], config: &GrlConfig) -> String {
         let mut grl = String::new();
 
         // Header
         grl.push_str("// Auto-generated rules from pattern mining\n");
         grl.push_str(&format!("// Generated: {}\n", Utc::now()));
         grl.push_str(&format!("// Total rules: {}\n", rules.len()));
+        grl.push_str(&format!("// Input field: {}\n", config.input_field));
+        grl.push_str(&format!("// Output field: {}\n", config.output_field));
         grl.push('\n');
 
         // Generate each rule
         for (idx, rule) in rules.iter().enumerate() {
-            grl.push_str(&Self::rule_to_grl(rule, idx));
+            grl.push_str(&Self::rule_to_grl(rule, idx, config));
             grl.push('\n');
         }
 
@@ -25,7 +78,7 @@ impl GrlExporter {
     }
 
     /// Convert a single rule to GRL format
-    fn rule_to_grl(rule: &AssociationRule, idx: usize) -> String {
+    fn rule_to_grl(rule: &AssociationRule, idx: usize, config: &GrlConfig) -> String {
         let rule_name = Self::generate_rule_name(rule, idx);
         let salience = (rule.metrics.confidence * 100.0) as i32;
 
@@ -53,8 +106,8 @@ rule "{}" salience {} no-loop {{
             rule.metrics.confidence * 100.0,
             rule_name,
             salience,
-            Self::generate_conditions_with_negation(&rule.antecedent, &rule.consequent),
-            Self::generate_actions(&rule.consequent),
+            Self::generate_conditions_with_negation(&rule.antecedent, &rule.consequent, config),
+            Self::generate_actions(&rule.consequent, config),
             rule_name,
             rule.metrics.confidence * 100.0
         )
@@ -84,36 +137,40 @@ rule "{}" salience {} no-loop {{
 
     /// Generate conditions from antecedent and consequent items
     #[allow(dead_code)]
-    fn generate_conditions(items: &[String]) -> String {
+    fn generate_conditions(items: &[String], config: &GrlConfig) -> String {
         let conditions: Vec<String> = items
             .iter()
-            .map(|item| format!("ShoppingCart.items contains \"{}\"", item))
+            .map(|item| format!("{} contains \"{}\"", config.input_field, item))
             .collect();
 
         conditions.join(" &&\n        ")
     }
 
     /// Generate actions from consequent items
-    fn generate_actions(items: &[String]) -> String {
+    fn generate_actions(items: &[String], config: &GrlConfig) -> String {
         items
             .iter()
-            .map(|item| format!("Recommendation.items += \"{}\"", item))
+            .map(|item| format!("{} += \"{}\"", config.output_field, item))
             .collect::<Vec<_>>()
             .join(";\n        ")
     }
 
     /// Generate conditions that check both antecedent AND that consequent items are NOT in recommendations
-    fn generate_conditions_with_negation(antecedent: &[String], consequent: &[String]) -> String {
+    fn generate_conditions_with_negation(
+        antecedent: &[String],
+        consequent: &[String],
+        config: &GrlConfig,
+    ) -> String {
         let mut conditions = Vec::new();
 
-        // Check ShoppingCart contains antecedent items
+        // Check input field contains antecedent items
         for item in antecedent {
-            conditions.push(format!("ShoppingCart.items contains \"{}\"", item));
+            conditions.push(format!("{} contains \"{}\"", config.input_field, item));
         }
 
-        // Check Recommendation does NOT contain consequent items (prevents duplicates)
+        // Check output field does NOT contain consequent items (prevents duplicates)
         for item in consequent {
-            conditions.push(format!("!(Recommendation.items contains \"{}\")", item));
+            conditions.push(format!("!({} contains \"{}\")", config.output_field, item));
         }
 
         conditions.join(" &&\n        ")

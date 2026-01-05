@@ -2,6 +2,8 @@
 //!
 //! Demonstrates mining from large dataset with detailed analysis.
 //! Use case: Production-scale recommendation system.
+//!
+//! NOTE: For custom field names, see GrlConfig in examples/flexible_domain_mining.rs
 
 use chrono::{Duration, Utc};
 use rust_rule_engine::rete::{

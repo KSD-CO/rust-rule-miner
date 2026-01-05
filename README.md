@@ -16,7 +16,8 @@ Discover business rules, recommendations, and patterns from your data without ma
 - **Sequential Pattern Mining** - Find time-ordered patterns (A → B → C)
 - **Graph-Based Patterns** - Model entity relationships and discover complex patterns
 - **Quality Metrics** - Confidence, Support, Lift, Conviction scores for each rule
-- **GRL Export** - Generate executable rules for [rust-rule-engine](https://github.com/KSD-CO/rust-rule-engine)
+- **🆕 Engine Integration** - Direct execution with [rust-rule-engine](https://github.com/KSD-CO/rust-rule-engine) (optional `engine` feature)
+- **🆕 PostgreSQL Streaming** - Stream and mine data directly from PostgreSQL (optional `postgres` feature)
 - **Excel/CSV Loading** - Stream large datasets from Excel (.xlsx) and CSV files with ultra-low memory using [excelstream](https://github.com/KSD-CO/excelstream)
 - **Visualization** - Export graphs to DOT format for Graphviz
 
@@ -72,7 +73,12 @@ for rule in &rules {
 
 ```toml
 [dependencies]
-rust-rule-miner = "0.1"
+rust-rule-miner = "0.2"
+
+# Optional features
+rust-rule-miner = { version = "0.2", features = ["engine"] }      # Rule execution
+rust-rule-miner = { version = "0.2", features = ["postgres"] }    # PostgreSQL streaming
+rust-rule-miner = { version = "0.2", features = ["cloud"] }       # Cloud storage (S3, HTTP)
 ```
 
 ---
@@ -157,28 +163,52 @@ let sequential_patterns = miner.find_sequential_patterns()?;
 
 ---
 
-## 🎨 Export to rust-rule-engine
+## 🎨 Engine Integration (New in v0.2!)
 
-Generate executable GRL rules:
+Execute mined rules in real-time with integrated engine support:
 
 ```rust
-// Generate GRL code
-let grl_code = miner.to_grl(&rules);
+use rust_rule_miner::engine::{MiningRuleEngine, facts_from_cart};
 
-// Save to file
-std::fs::write("mined_rules.grl", grl_code)?;
+// 1. Mine rules (as usual)
+let mut miner = RuleMiner::new(config);
+miner.add_transactions(transactions)?;
+let rules = miner.mine_association_rules()?;
 
-// Load into rust-rule-engine
-use rust_rule_engine::RuleEngine;
+// 2. Load into engine (one line!)
+let mut engine = MiningRuleEngine::new("ProductRecommendations");
+engine.load_rules(&rules)?;
 
-let mut engine = RuleEngine::new();
-engine.add_rules_from_grl(&grl_code)?;
+// 3. Execute in real-time
+let facts = facts_from_cart(vec!["Laptop".to_string()]);
+let result = engine.execute(&facts)?;
 
-// Use for recommendations
-let mut facts = Facts::new();
-facts.set("ShoppingCart.items", vec!["Laptop"]);
-engine.execute(&mut facts)?;
+if let Some(recommendations) = result.get("Recommendation.items") {
+    println!("Recommend: {:?}", recommendations);  // ["Mouse", "Keyboard"]
+}
 ```
+
+### Flexible GRL Export for Any Domain
+
+No more hardcoded field names! Configure for any use case:
+
+```rust
+use rust_rule_miner::export::GrlConfig;
+
+// E-commerce
+let config = GrlConfig::custom("Cart.items", "Recommendations.products");
+
+// Fraud detection
+let config = GrlConfig::custom("Transaction.indicators", "FraudAlert.flags");
+
+// Security
+let config = GrlConfig::custom("NetworkActivity.events", "SecurityAlert.threats");
+
+// Generate GRL with custom fields
+let grl = GrlExporter::to_grl_with_config(&rules, &config);
+```
+
+See [examples/flexible_domain_mining.rs](examples/flexible_domain_mining.rs) for complete examples across multiple domains.
 
 **Generated GRL (rust-rule-engine v1.15.0+ with `+=` operator):**
 ```grl
@@ -269,35 +299,68 @@ rust-rule-engine = "1.15.0"  # Required for += array append in GRL
 
 See [examples/](examples/) directory:
 
-- `basic_mining.rs` - Simple association rule mining
-- `ecommerce_recommendations.rs` - Product recommendation system
-- `fraud_detection.rs` - Fraud pattern discovery
-- `sequential_patterns.rs` - Time-ordered pattern mining
-- `graph_patterns.rs` - Graph-based pattern matching
+**Basic Examples:**
+- `01_simple_ecommerce.rs` - Simple e-commerce association rule mining
+- `02_medium_complexity.rs` - Medium complexity patterns
+- `03_advanced_large_dataset.rs` - Advanced mining with large datasets
+- `04_load_from_excel_csv.rs` - Loading data from Excel/CSV files
+- `basic_mining.rs` - Basic association rule mining
+
+**Engine Integration (v0.2.0+):**
+- `integration_with_engine.rs` - Native engine integration (simple API)
+- `integration_with_rete.rs` - RETE engine for high performance
+- `flexible_domain_mining.rs` - Multi-domain examples (fraud, security, content)
+- `postgres_stream_mining.rs` - PostgreSQL streaming + mining
+
+**Advanced:**
+- `performance_test.rs` - Performance benchmarking
+- `cloud_demo.rs` - Cloud storage integration (S3, HTTP)
+- `excelstream_demo.rs` - Excel streaming examples
 
 ---
 
 ## 🗺️ Roadmap
 
+**Completed (v0.2.0):**
 - [x] Apriori algorithm
 - [x] Association rule generation
 - [x] Quality metrics (confidence, support, lift)
-- [x] GRL export
-- [ ] FP-Growth algorithm (Week 3-4)
-- [ ] Sequential pattern mining (Week 6)
-- [ ] Graph pattern matching (Week 8)
-- [ ] Incremental mining
+- [x] GRL export with flexible field configuration
+- [x] Engine integration (rust-rule-engine)
+- [x] PostgreSQL streaming support
+- [x] Multi-domain support (e-commerce, fraud, security)
+- [x] Excel/CSV data loading
+
+**Planned:**
+- [ ] FP-Growth algorithm optimization
+- [ ] Sequential pattern mining
+- [ ] Graph pattern matching
+- [ ] Incremental mining (update rules with new data)
 - [ ] Multi-level mining (category hierarchies)
 - [ ] Negative pattern mining
+- [ ] Real-time streaming with LISTEN/NOTIFY
+- [ ] Rule versioning and A/B testing
+- [ ] WebAssembly support
 
 ---
 
 ## 📖 Documentation
 
+**Getting Started:**
 - [API Documentation](https://docs.rs/rust-rule-miner)
+- [Getting Started Guide](docs/GETTING_STARTED.md)
 - [User Guide](docs/USER_GUIDE.md)
-- [Algorithm Details](docs/ALGORITHMS.md)
-- [Planning Document](docs/planning/GRAPH_BASED_RULE_MINING.md)
+
+**v0.2.0 Engine Integration:**
+- [Engine Integration Summary](ENGINE_INTEGRATION_SUMMARY.md) - Complete v0.2.0 overview
+- [Integration Guide](INTEGRATION_GUIDE.md) - Detailed API guide with examples
+- [PostgreSQL Streaming](examples/POSTGRES_STREAMING.md) - Database integration tutorial
+
+**Advanced Topics:**
+- [Integration with Web Frameworks](docs/INTEGRATION.md) - Actix-Web, Axum, production deployment
+- [Performance Tuning](docs/PERFORMANCE.md) - Benchmarks and optimization
+- [Algorithm Details](docs/ALGORITHMS.md) - Technical algorithm documentation
+- [Advanced Usage](docs/ADVANCED.md)
 
 ---
 

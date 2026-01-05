@@ -1,9 +1,9 @@
 [package]
 name = "rust-rule-miner"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Ton That Vu <ttvuhm@gmail.com>"]
-description = "Automatic rule discovery from historical data using association rule mining, sequential pattern mining, and graph-based pattern matching. Generates executable rules for rust-rule-engine."
+description = "Automatic rule discovery from historical data using association rule mining, sequential pattern mining, and graph-based pattern matching. Generates and executes rules with rust-rule-engine integration."
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/KSD-CO/rust-rule-miner"
@@ -14,6 +14,8 @@ categories = ["algorithms", "data-structures", "science"]
 [features]
 default = []
 cloud = ["tokio", "reqwest"]  # Enable cloud storage support (S3, HTTP)
+engine = ["rust-rule-engine"]  # Enable rule engine integration
+postgres = ["tokio-postgres", "bb8", "bb8-postgres", "tokio"]  # Enable PostgreSQL streaming support
 
 [dependencies]
 # Serialization
@@ -42,10 +44,16 @@ excelstream = { version = "0.14", features = ["cloud-s3", "cloud-http"] }  # Hig
 tokio = { version = "1", features = ["rt", "macros"], optional = true }
 reqwest = { version = "0.12", optional = true }
 
+# Rule engine integration (core feature)
+rust-rule-engine = { version = "1.15.0", optional = true }
+
+# PostgreSQL support for streaming data
+tokio-postgres = { version = "0.7", features = ["with-chrono-0_4"], optional = true }
+bb8 = { version = "0.8", optional = true }
+bb8-postgres = { version = "0.8", optional = true }
+
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
-# Integration with rust-rule-engine v1.15.0+ (requires += operator support for array append in GRL)
-rust-rule-engine = "1.15.0"
 
 # Benchmarks
 [[bench]]

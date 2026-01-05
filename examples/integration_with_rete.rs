@@ -7,8 +7,19 @@ use rust_rule_engine::rete::{
 use rust_rule_miner::{export::GrlExporter, MiningConfig, RuleMiner, Transaction};
 use std::fs;
 
+// NOTE: This example shows RETE engine integration (high performance).
+// RETE is recommended for production with many rules (>100).
+//
+// For custom field names (not just ShoppingCart.items), use GrlConfig:
+//   use rust_rule_miner::export::GrlConfig;
+//   let config = GrlConfig::custom("Order.items", "Recommendations.products");
+//   let grl = GrlExporter::to_grl_with_config(&rules, &config);
+//
+// See also: examples/flexible_domain_mining.rs
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== Integration with RETE Engine: Mine Rules → Execute ===\n");
+    println!("NOTE: RETE engine is optimized for high performance with many rules.\n");
 
     // ========== STEP 1: Mine Rules from Historical Data ==========
     println!("STEP 1: Mining rules from historical purchase data...\n");

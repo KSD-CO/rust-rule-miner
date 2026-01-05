@@ -2,8 +2,22 @@ use chrono::Utc;
 use rust_rule_engine::{Facts, GRLParser, KnowledgeBase, RustRuleEngine, Value};
 use rust_rule_miner::{export::GrlExporter, MiningConfig, RuleMiner, Transaction};
 
+// NOTE: This example shows the LOW-LEVEL API for direct engine integration.
+// For a SIMPLER API, see the MiningRuleEngine wrapper:
+//   use rust_rule_miner::engine::MiningRuleEngine;
+//   let mut engine = MiningRuleEngine::new("MyRules");
+//   engine.load_rules(&rules)?;
+//   let result = engine.execute(&facts)?;
+//
+// For custom field names (not just ShoppingCart.items), see:
+//   - examples/flexible_domain_mining.rs
+//   - examples/postgres_stream_mining.rs
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== Integration Example: Mine Rules → Execute in rust-rule-engine ===\n");
+    println!(
+        "NOTE: This shows the low-level API. For simpler usage, see MiningRuleEngine wrapper.\n"
+    );
 
     // ========== STEP 1: Mine Rules from Historical Data ==========
     println!("STEP 1: Mining rules from historical purchase data...\n");
