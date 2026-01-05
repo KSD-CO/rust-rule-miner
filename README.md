@@ -12,30 +12,38 @@ Discover business rules, recommendations, and patterns from your data without ma
 
 ## 🎯 Features
 
+### Core Features
 - **Association Rule Mining** - Discover "If X then Y" patterns (Apriori, FP-Growth algorithms)
 - **Sequential Pattern Mining** - Find time-ordered patterns (A → B → C)
 - **Graph-Based Patterns** - Model entity relationships and discover complex patterns
 - **Quality Metrics** - Confidence, Support, Lift, Conviction scores for each rule
-- **🆕 Engine Integration** - Direct execution with [rust-rule-engine](https://github.com/KSD-CO/rust-rule-engine) (optional `engine` feature)
-- **🆕 PostgreSQL Streaming** - Stream and mine data directly from PostgreSQL (optional `postgres` feature)
+- **🔌 Engine Integration** - Direct execution with [rust-rule-engine](https://github.com/KSD-CO/rust-rule-engine) *(enabled by default)*
 - **Excel/CSV Loading** - Stream large datasets from Excel (.xlsx) and CSV files with ultra-low memory using [excelstream](https://github.com/KSD-CO/excelstream)
+- **ColumnMapping** - Flexible field selection and multi-field pattern mining from CSV/Excel
+- **GRL Export** - Export rules to GRL format for external rule engines
 - **Visualization** - Export graphs to DOT format for Graphviz
+
+### Additional Features (opt-in)
+- **🗄️ PostgreSQL Streaming** (`postgres` feature) - Stream and mine data directly from PostgreSQL
+- **☁️ Cloud Storage** (`cloud` feature) - Load data from AWS S3 and HTTP endpoints
 
 ---
 
 ## 🚀 Quick Start
 
 ```rust
-use rust_rule_miner::{RuleMiner, Transaction, MiningConfig};
+use rust_rule_miner::{RuleMiner, Transaction, MiningConfig, MiningAlgorithm};
 use chrono::Utc;
 
-// 1. Load historical transactions
+// 1. Create transactions with items you want to mine patterns from
+// Each transaction contains: ID, items (the values to find patterns in), timestamp
 let transactions = vec![
-    Transaction::new("tx1", vec!["Laptop", "Mouse", "Keyboard"], Utc::now()),
-    Transaction::new("tx2", vec!["Laptop", "Mouse"], Utc::now()),
-    Transaction::new("tx3", vec!["Laptop", "Mouse", "USB-C Hub"], Utc::now()),
-    Transaction::new("tx4", vec!["Phone", "Phone Case"], Utc::now()),
+    Transaction::new("tx1", vec!["Laptop".to_string(), "Mouse".to_string(), "Keyboard".to_string()], Utc::now()),
+    Transaction::new("tx2", vec!["Laptop".to_string(), "Mouse".to_string()], Utc::now()),
+    Transaction::new("tx3", vec!["Laptop".to_string(), "Mouse".to_string(), "USB-C Hub".to_string()], Utc::now()),
+    Transaction::new("tx4", vec!["Phone".to_string(), "Phone Case".to_string()], Utc::now()),
 ];
+// The miner will find patterns like: "Laptop" often appears with "Mouse"
 
 // 2. Configure mining parameters
 let config = MiningConfig {
@@ -71,14 +79,32 @@ for rule in &rules {
 
 ## 📦 Installation
 
+**Default installation (includes rust-rule-engine for execution):**
 ```toml
 [dependencies]
 rust-rule-miner = "0.2"
+```
 
-# Optional features
-rust-rule-miner = { version = "0.2", features = ["engine"] }      # Rule execution
-rust-rule-miner = { version = "0.2", features = ["postgres"] }    # PostgreSQL streaming
-rust-rule-miner = { version = "0.2", features = ["cloud"] }       # Cloud storage (S3, HTTP)
+**Mining-only (without engine, just export to GRL):**
+```toml
+[dependencies]
+rust-rule-miner = { version = "0.2", default-features = false }
+```
+
+**With additional features:**
+```toml
+[dependencies]
+# Add PostgreSQL streaming support
+rust-rule-miner = { version = "0.2", features = ["postgres"] }
+
+# Add cloud storage support (S3, HTTP)
+rust-rule-miner = { version = "0.2", features = ["cloud"] }
+
+# Combine all features
+rust-rule-miner = { version = "0.2", features = ["postgres", "cloud"] }
+
+# Mining-only + PostgreSQL (without engine)
+rust-rule-miner = { version = "0.2", default-features = false, features = ["postgres"] }
 ```
 
 ---
@@ -102,23 +128,31 @@ miner.add_transactions(transactions)?;
 let rules = miner.mine_association_rules()?;
 ```
 
-**Required file format (columns must be in this order):**
-```csv
-transaction_id,items,timestamp
-tx001,"Laptop,Mouse,Keyboard",2024-01-01T10:00:00Z
-tx002,"Phone,Phone Case",2024-01-02T11:30:00Z
-```
-
-- **Column 0**: Transaction/Group ID
-- **Column 1**: Items (comma-separated values to mine)
-- **Column 2**: Timestamp (ISO 8601, Unix timestamp, or datetime string)
-
 **Memory usage:** ~3-35 MB regardless of file size! 🚀
 
 ### Mining Different Fields (New in v0.2.1!)
 
 **No preprocessing needed!** Use `ColumnMapping` to mine any fields directly:
 
+**ColumnMapping API:**
+```rust
+// Single field mining
+ColumnMapping::simple(
+    transaction_id_column: usize,    // Column index for transaction/group ID
+    item_column: usize,              // Column index for items to mine
+    timestamp_column: usize          // Column index for timestamp
+)
+
+// Multi-field mining (combine multiple columns)
+ColumnMapping::multi_field(
+    transaction_id_column: usize,    // Column index for transaction/group ID
+    item_columns: Vec<usize>,        // Column indices to combine
+    timestamp_column: usize,         // Column index for timestamp
+    field_separator: String          // Separator for combined fields (e.g., "::")
+)
+```
+
+**Examples:**
 ```rust
 use rust_rule_miner::data_loader::{DataLoader, ColumnMapping};
 
@@ -126,11 +160,11 @@ use rust_rule_miner::data_loader::{DataLoader, ColumnMapping};
 //      0            1             2         3      4         5
 
 // Option 1: Mine product names (column 1)
-let mapping = ColumnMapping::simple(0, 1, 5);
+let mapping = ColumnMapping::simple(0, 1, 5);  // tx_id=0, items=1, timestamp=5
 let transactions = DataLoader::from_csv_with_mapping("sales.csv", mapping)?;
 
 // Option 2: Mine categories (column 2)
-let mapping = ColumnMapping::simple(0, 2, 5);
+let mapping = ColumnMapping::simple(0, 2, 5);  // tx_id=0, items=2, timestamp=5
 let transactions = DataLoader::from_csv_with_mapping("sales.csv", mapping)?;
 
 // Option 3: Mine product + category combined
@@ -168,8 +202,17 @@ let mapping = ColumnMapping::multi_field(0, vec![1, 2, 3], 4, "::".to_string());
 
 ### 1. E-commerce Product Recommendations
 ```rust
+use rust_rule_miner::{RuleMiner, MiningConfig, data_loader::DataLoader};
+
 // Load historical purchase data from CSV
 let transactions = DataLoader::from_csv("purchase_history.csv")?;
+
+// Configure mining parameters
+let config = MiningConfig {
+    min_support: 0.05,
+    min_confidence: 0.6,
+    ..Default::default()
+};
 
 // Discover: "Customers who bought X also bought Y"
 let mut miner = RuleMiner::new(config);
@@ -181,8 +224,17 @@ let rules = miner.mine_association_rules()?;
 
 ### 2. Fraud Detection Pattern Discovery
 ```rust
+use rust_rule_miner::{RuleMiner, MiningConfig};
+
+// Configure for fraud detection
+let config = MiningConfig {
+    min_support: 0.02,      // Even rare patterns matter
+    min_confidence: 0.85,   // High confidence required
+    ..Default::default()
+};
+
 // Find patterns unique to fraud cases
-let fraud_miner = RuleMiner::new(config);
+let mut fraud_miner = RuleMiner::new(config);
 fraud_miner.add_transactions(fraud_cases)?;
 
 let patterns = fraud_miner.mine_association_rules()?;
@@ -200,6 +252,7 @@ let medical_miner = RuleMiner::new(MiningConfig {
 
 ### 4. Sequential Pattern Mining
 ```rust
+use rust_rule_miner::{RuleMiner, MiningConfig};
 use std::time::Duration;
 
 // Find time-ordered patterns
@@ -208,22 +261,29 @@ let config = MiningConfig {
     ..Default::default()
 };
 
+let mut miner = RuleMiner::new(config);
+miner.add_transactions(transactions)?;
+
 let sequential_patterns = miner.find_sequential_patterns()?;
 // Result: Laptop → (2 days) → Mouse → (5 days) → Laptop Bag
 ```
 
 ---
 
-## 🎨 Engine Integration (New in v0.2!)
+## 🎨 Engine Integration
 
-Execute mined rules in real-time with integrated engine support.
+Execute mined rules in real-time with built-in [rust-rule-engine](https://github.com/KSD-CO/rust-rule-engine) support (included by default).
 
 **Two-Phase Approach:**
 1. **Mining Phase**: Apply quality criteria (min_support, min_confidence, min_lift) to filter rules
 2. **Execution Phase**: Execute pre-filtered high-quality rules in real-time
 
 ```rust
+use rust_rule_miner::{RuleMiner, MiningConfig, data_loader::DataLoader};
 use rust_rule_miner::engine::{MiningRuleEngine, facts_from_cart};
+
+// Load historical data
+let transactions = DataLoader::from_csv("sales_history.csv")?;
 
 // PHASE 1: Mine rules with quality criteria
 let config = MiningConfig {
@@ -257,19 +317,19 @@ if let Some(recommendations) = result.get("Recommendation.items") {
 No more hardcoded field names! Configure for any use case:
 
 ```rust
-use rust_rule_miner::export::GrlConfig;
+use rust_rule_miner::export::{GrlConfig, GrlExporter};
 
 // E-commerce
-let config = GrlConfig::custom("Cart.items", "Recommendations.products");
+let ecommerce_config = GrlConfig::custom("Cart.items", "Recommendations.products");
+let grl = GrlExporter::to_grl_with_config(&rules, &ecommerce_config);
 
 // Fraud detection
-let config = GrlConfig::custom("Transaction.indicators", "FraudAlert.flags");
+let fraud_config = GrlConfig::custom("Transaction.indicators", "FraudAlert.flags");
+let grl = GrlExporter::to_grl_with_config(&rules, &fraud_config);
 
 // Security
-let config = GrlConfig::custom("NetworkActivity.events", "SecurityAlert.threats");
-
-// Generate GRL with custom fields
-let grl = GrlExporter::to_grl_with_config(&rules, &config);
+let security_config = GrlConfig::custom("NetworkActivity.events", "SecurityAlert.threats");
+let grl = GrlExporter::to_grl_with_config(&rules, &security_config);
 ```
 
 See [examples/flexible_domain_mining.rs](examples/flexible_domain_mining.rs) for complete examples across multiple domains.
@@ -364,21 +424,21 @@ rust-rule-engine = "1.15.0"  # Required for += array append in GRL
 See [examples/](examples/) directory:
 
 **Basic Examples:**
-- `01_simple_ecommerce.rs` - Simple e-commerce association rule mining
-- `02_medium_complexity.rs` - Medium complexity patterns
-- `03_advanced_large_dataset.rs` - Advanced mining with large datasets
-- `04_load_from_excel_csv.rs` - Loading data from Excel/CSV files
+- `01_simple_ecommerce.rs` - Simple e-commerce with engine execution
+- `02_medium_complexity.rs` - Medium complexity patterns with RETE
+- `03_advanced_large_dataset.rs` - Large-scale mining with statistics
+- `04_load_from_excel_csv.rs` - Loading data from Excel/CSV with ColumnMapping
 - `basic_mining.rs` - Basic association rule mining
 
-**Engine Integration (v0.2.0+):**
-- `integration_with_engine.rs` - Native engine integration (simple API)
-- `integration_with_rete.rs` - RETE engine for high performance
+**Engine Integration:**
+- `integration_with_engine.rs` - Simple MiningRuleEngine API
+- `integration_with_rete.rs` - High-performance RETE engine
 - `flexible_domain_mining.rs` - Multi-domain examples (fraud, security, content)
-- `postgres_stream_mining.rs` - PostgreSQL streaming + mining
 
-**Advanced:**
+**Advanced Features:**
+- `postgres_stream_mining.rs` - PostgreSQL streaming + mining (requires `postgres` feature)
 - `performance_test.rs` - Performance benchmarking
-- `cloud_demo.rs` - Cloud storage integration (S3, HTTP)
+- `cloud_demo.rs` - Cloud storage integration (requires `cloud` feature)
 - `excelstream_demo.rs` - Excel streaming examples
 
 ---

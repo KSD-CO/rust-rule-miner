@@ -12,7 +12,7 @@ keywords = ["data-mining", "pattern-mining", "association-rules", "apriori", "ru
 categories = ["algorithms", "data-structures", "science"]
 
 [features]
-default = []
+default = ["engine"]  # Engine integration enabled by default (opt-out with: default-features = false)
 cloud = ["tokio", "reqwest"]  # Enable cloud storage support (S3, HTTP)
 engine = ["rust-rule-engine"]  # Enable rule engine integration
 postgres = ["tokio-postgres", "bb8", "bb8-postgres", "tokio"]  # Enable PostgreSQL streaming support

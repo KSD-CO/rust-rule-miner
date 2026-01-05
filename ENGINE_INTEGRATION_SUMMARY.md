@@ -45,7 +45,7 @@ This update transforms `rust-rule-miner` from a simple mining library into a **c
 - ✅ `ENGINE_INTEGRATION_SUMMARY.md` - This file
 
 ### Modified Files:
-- ✅ `Cargo.toml` - Added `engine` and `postgres` features, version 0.2.0
+- ✅ `Cargo.toml` - Added `engine` and `postgres` features, version 0.2.1
 - ✅ `src/lib.rs` - Export engine module and ColumnMapping
 - ✅ `src/data_loader.rs` - Added ColumnMapping and flexible loading methods
 - ✅ `src/export/grl.rs` - Added `GrlConfig` struct
