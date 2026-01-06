@@ -25,11 +25,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", "-".repeat(60));
     println!("Loading from S3 would look like:");
     println!();
+    println!("// Define column mapping (transaction_id, items, timestamp)");
+    println!("let mapping = ColumnMapping::simple(0, 1, 2);");
+    println!();
     println!("let transactions = DataLoader::from_s3(");
     println!("    \"my-data-bucket\",");
     println!("    \"sales/2024/transactions.xlsx\",");
     println!("    \"us-east-1\",");
-    println!("    0  // sheet index");
+    println!("    0,  // sheet index");
+    println!("    mapping");
     println!(").await?;");
     println!();
     println!("Features:");
@@ -44,8 +48,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", "-".repeat(60));
     println!("Loading from HTTP would look like:");
     println!();
+    println!("// Define column mapping (transaction_id, items, timestamp)");
+    println!("let mapping = ColumnMapping::simple(0, 1, 2);");
+    println!();
     println!("let transactions = DataLoader::from_http(");
-    println!("    \"https://example.com/data/transactions.csv\"");
+    println!("    \"https://example.com/data/transactions.csv\",");
+    println!("    mapping");
     println!(").await?;");
     println!();
     println!("Features:");
@@ -59,18 +67,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", "-".repeat(60));
     println!(
         "
-// 1. Load from cloud storage
+// 1. Load from cloud storage with column mapping
+use rust_rule_miner::data_loader::ColumnMapping;
+
+// Standard 3-column format (transaction_id, items, timestamp)
+let mapping = ColumnMapping::simple(0, 1, 2);
 let transactions = DataLoader::from_s3(
     \"analytics-bucket\",
     \"daily-sales.xlsx\",
     \"us-west-2\",
-    0
+    0,
+    mapping
 ).await?;
 
-// NOTE: For multi-field data, use ColumnMapping (v0.2.0+):
-// use rust_rule_miner::data_loader::ColumnMapping;
+// For multi-field data (combine multiple columns):
 // let mapping = ColumnMapping::multi_field(0, vec![1, 2], 5, \"::\".to_string());
-// let transactions = DataLoader::from_s3_with_mapping(..., mapping).await?;
+// let transactions = DataLoader::from_s3(..., mapping).await?;
 
 // 2. Mine patterns
 let mut miner = RuleMiner::new(MiningConfig {{

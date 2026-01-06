@@ -70,8 +70,10 @@ fn demo_csv_loading() -> Result<(), Box<dyn std::error::Error>> {
 
     let file_path = "/tmp/sample_transactions.csv";
 
-    // Load transactions using excelstream
-    let transactions = DataLoader::from_csv(file_path)?;
+    // Load transactions using excelstream with standard column mapping
+    // CSV format: transaction_id, items, timestamp (columns 0, 1, 2)
+    let mapping = ColumnMapping::simple(0, 1, 2);
+    let transactions = DataLoader::from_csv(file_path, mapping)?;
 
     println!("✓ Loaded {} transactions from CSV", transactions.len());
     println!();
@@ -94,8 +96,9 @@ fn demo_csv_mining() -> Result<(), Box<dyn std::error::Error>> {
 
     let file_path = "/tmp/sample_transactions.csv";
 
-    // Load transactions
-    let transactions = DataLoader::from_csv(file_path)?;
+    // Load transactions with standard column mapping
+    let mapping = ColumnMapping::simple(0, 1, 2);
+    let transactions = DataLoader::from_csv(file_path, mapping)?;
 
     // Mining configuration
     let config = MiningConfig {
@@ -206,7 +209,7 @@ fn demo_column_mapping() -> Result<(), Box<dyn std::error::Error>> {
     // OPTION 1: Mine by product names only
     println!("Option 1: Mine by Product Names (column 1)");
     let mapping = ColumnMapping::simple(0, 1, 5);
-    let transactions = DataLoader::from_csv_with_mapping(file_path, mapping)?;
+    let transactions = DataLoader::from_csv(file_path, mapping)?;
 
     println!("✓ Loaded {} customer transactions", transactions.len());
     println!("Sample items: {}", transactions[0].items.join(", "));
@@ -215,7 +218,7 @@ fn demo_column_mapping() -> Result<(), Box<dyn std::error::Error>> {
     // OPTION 2: Mine by categories only
     println!("Option 2: Mine by Categories (column 2)");
     let mapping = ColumnMapping::simple(0, 2, 5);
-    let transactions = DataLoader::from_csv_with_mapping(file_path, mapping)?;
+    let transactions = DataLoader::from_csv(file_path, mapping)?;
 
     println!("✓ Loaded {} customer transactions", transactions.len());
     println!("Sample items: {}", transactions[0].items.join(", "));
@@ -229,7 +232,7 @@ fn demo_column_mapping() -> Result<(), Box<dyn std::error::Error>> {
         5,                // timestamp
         "::".to_string(), // separator
     );
-    let transactions = DataLoader::from_csv_with_mapping(file_path, mapping)?;
+    let transactions = DataLoader::from_csv(file_path, mapping)?;
 
     println!("✓ Loaded {} customer transactions", transactions.len());
     println!("Sample items: {}", transactions[0].items.join(", "));
@@ -243,7 +246,7 @@ fn demo_column_mapping() -> Result<(), Box<dyn std::error::Error>> {
         5,             // timestamp
         "::".to_string(),
     );
-    let transactions = DataLoader::from_csv_with_mapping(file_path, mapping)?;
+    let transactions = DataLoader::from_csv(file_path, mapping)?;
 
     println!("✓ Loaded {} customer transactions", transactions.len());
     println!("Sample items: {}", transactions[0].items.join(", "));
@@ -252,7 +255,7 @@ fn demo_column_mapping() -> Result<(), Box<dyn std::error::Error>> {
     // Mine rules from product+category patterns
     println!("Mining rules from Product::Category patterns...");
     let mapping = ColumnMapping::multi_field(0, vec![1, 2], 5, "::".to_string());
-    let transactions = DataLoader::from_csv_with_mapping(file_path, mapping)?;
+    let transactions = DataLoader::from_csv(file_path, mapping)?;
 
     let config = MiningConfig {
         min_support: 0.3,

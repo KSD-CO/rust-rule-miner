@@ -82,29 +82,29 @@ for rule in &rules {
 **Default installation (includes rust-rule-engine for execution):**
 ```toml
 [dependencies]
-rust-rule-miner = "0.2"
+rust-rule-miner = "0.2.2"
 ```
 
 **Mining-only (without engine, just export to GRL):**
 ```toml
 [dependencies]
-rust-rule-miner = { version = "0.2", default-features = false }
+rust-rule-miner = { version = "0.2.2", default-features = false }
 ```
 
 **With additional features:**
 ```toml
 [dependencies]
 # Add PostgreSQL streaming support
-rust-rule-miner = { version = "0.2", features = ["postgres"] }
+rust-rule-miner = { version = "0.2.2", features = ["postgres"] }
 
 # Add cloud storage support (S3, HTTP)
-rust-rule-miner = { version = "0.2", features = ["cloud"] }
+rust-rule-miner = { version = "0.2.2", features = ["cloud"] }
 
 # Combine all features
-rust-rule-miner = { version = "0.2", features = ["postgres", "cloud"] }
+rust-rule-miner = { version = "0.2.2", features = ["postgres", "cloud"] }
 
 # Mining-only + PostgreSQL (without engine)
-rust-rule-miner = { version = "0.2", default-features = false, features = ["postgres"] }
+rust-rule-miner = { version = "0.2.2", default-features = false, features = ["postgres"] }
 ```
 
 ---
@@ -114,13 +114,16 @@ rust-rule-miner = { version = "0.2", default-features = false, features = ["post
 Stream large datasets with constant memory usage using [excelstream](https://github.com/KSD-CO/excelstream):
 
 ```rust
-use rust_rule_miner::data_loader::DataLoader;
+use rust_rule_miner::data_loader::{DataLoader, ColumnMapping};
+
+// Specify which columns to mine: transaction_id, items, timestamp
+let mapping = ColumnMapping::simple(0, 1, 2);
 
 // Load from CSV file (ultra-fast, ~1.2M rows/sec)
-let transactions = DataLoader::from_csv("sales_data.csv")?;
+let transactions = DataLoader::from_csv("sales_data.csv", mapping.clone())?;
 
 // Load from Excel file (.xlsx)
-let transactions = DataLoader::from_excel("sales_data.xlsx", 0)?;  // 0 = first sheet
+let transactions = DataLoader::from_excel("sales_data.xlsx", 0, mapping)?;  // 0 = first sheet
 
 // Mine rules from loaded data
 let mut miner = RuleMiner::new(config);
@@ -130,7 +133,7 @@ let rules = miner.mine_association_rules()?;
 
 **Memory usage:** ~3-35 MB regardless of file size! 🚀
 
-### Mining Different Fields (New in v0.2.1!)
+### Mining Different Fields (New in v0.2.0+)
 
 **No preprocessing needed!** Use `ColumnMapping` to mine any fields directly:
 
@@ -161,11 +164,11 @@ use rust_rule_miner::data_loader::{DataLoader, ColumnMapping};
 
 // Option 1: Mine product names (column 1)
 let mapping = ColumnMapping::simple(0, 1, 5);  // tx_id=0, items=1, timestamp=5
-let transactions = DataLoader::from_csv_with_mapping("sales.csv", mapping)?;
+let transactions = DataLoader::from_csv("sales.csv", mapping)?;
 
 // Option 2: Mine categories (column 2)
 let mapping = ColumnMapping::simple(0, 2, 5);  // tx_id=0, items=2, timestamp=5
-let transactions = DataLoader::from_csv_with_mapping("sales.csv", mapping)?;
+let transactions = DataLoader::from_csv("sales.csv", mapping)?;
 
 // Option 3: Mine product + category combined
 let mapping = ColumnMapping::multi_field(
@@ -174,12 +177,12 @@ let mapping = ColumnMapping::multi_field(
     5,                  // timestamp column
     "::".to_string()    // separator
 );
-let transactions = DataLoader::from_csv_with_mapping("sales.csv", mapping)?;
+let transactions = DataLoader::from_csv("sales.csv", mapping)?;
 // Items: "Laptop::Electronics", "Mouse::Accessories"
 
 // Option 4: Mine product + category + location
 let mapping = ColumnMapping::multi_field(0, vec![1, 2, 4], 5, "::".to_string());
-let transactions = DataLoader::from_csv_with_mapping("sales.csv", mapping)?;
+let transactions = DataLoader::from_csv("sales.csv", mapping)?;
 // Items: "Laptop::Electronics::US", "Mouse::Accessories::UK"
 ```
 
@@ -202,10 +205,11 @@ let mapping = ColumnMapping::multi_field(0, vec![1, 2, 3], 4, "::".to_string());
 
 ### 1. E-commerce Product Recommendations
 ```rust
-use rust_rule_miner::{RuleMiner, MiningConfig, data_loader::DataLoader};
+use rust_rule_miner::{RuleMiner, MiningConfig, data_loader::{DataLoader, ColumnMapping}};
 
-// Load historical purchase data from CSV
-let transactions = DataLoader::from_csv("purchase_history.csv")?;
+// Load historical purchase data from CSV (transaction_id, items, timestamp)
+let mapping = ColumnMapping::simple(0, 1, 2);
+let transactions = DataLoader::from_csv("purchase_history.csv", mapping)?;
 
 // Configure mining parameters
 let config = MiningConfig {
@@ -279,11 +283,12 @@ Execute mined rules in real-time with built-in [rust-rule-engine](https://github
 2. **Execution Phase**: Execute pre-filtered high-quality rules in real-time
 
 ```rust
-use rust_rule_miner::{RuleMiner, MiningConfig, data_loader::DataLoader};
+use rust_rule_miner::{RuleMiner, MiningConfig, data_loader::{DataLoader, ColumnMapping}};
 use rust_rule_miner::engine::{MiningRuleEngine, facts_from_cart};
 
-// Load historical data
-let transactions = DataLoader::from_csv("sales_history.csv")?;
+// Load historical data (transaction_id, items, timestamp)
+let mapping = ColumnMapping::simple(0, 1, 2);
+let transactions = DataLoader::from_csv("sales_history.csv", mapping)?;
 
 // PHASE 1: Mine rules with quality criteria
 let config = MiningConfig {

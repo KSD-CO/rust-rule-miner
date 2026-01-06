@@ -1,6 +1,6 @@
 [package]
 name = "rust-rule-miner"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 authors = ["Ton That Vu <ttvuhm@gmail.com>"]
 description = "Automatic rule discovery from historical data using association rule mining, sequential pattern mining, and graph-based pattern matching. Generates and executes rules with rust-rule-engine integration."

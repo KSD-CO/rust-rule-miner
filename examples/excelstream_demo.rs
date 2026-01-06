@@ -34,11 +34,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // DataLoader::from_csv uses excelstream internally for streaming
-    // NOTE: For multi-field data, use DataLoader::from_csv_with_mapping() with ColumnMapping
-    // Example: DataLoader::from_csv_with_mapping(path, ColumnMapping::simple(0, 1, 5))
-    // See examples/04_load_from_excel_csv.rs for complete column mapping examples
+    // ColumnMapping specifies which columns to mine: transaction_id, items, timestamp
+    // For multi-field data (combining multiple columns), see examples/04_load_from_excel_csv.rs
     println!("Loading transactions...");
-    let transactions = DataLoader::from_csv(csv_path)?;
+    let mapping = rust_rule_miner::data_loader::ColumnMapping::simple(0, 1, 2);
+    let transactions = DataLoader::from_csv(csv_path, mapping)?;
     println!("Loaded {} transactions", transactions.len());
     println!("Memory during load: ~3-35 MB (constant!)");
     println!();

@@ -17,7 +17,7 @@ Complete guide for integrating rust-rule-miner with rust-rule-engine and other s
 
 ## rust-rule-engine Integration
 
-### Complete E-commerce Recommendation System (Simple API - v0.2.0+)
+### Complete E-commerce Recommendation System (Simple API - v0.2.2+)
 
 **Using the new `MiningRuleEngine` wrapper for simple integration:**
 

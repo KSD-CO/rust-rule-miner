@@ -55,6 +55,7 @@ pub mod engine;
 // Re-exports
 pub use config::{MiningAlgorithm, MiningConfig};
 pub use errors::{MiningError, Result};
+pub use export::grl::{GrlConfig, RuleTemplate};
 pub use mining::RuleMiner;
 pub use transaction::Transaction;
 pub use types::{

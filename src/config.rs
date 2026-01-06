@@ -40,8 +40,7 @@ pub enum MiningAlgorithm {
     /// Apriori algorithm (classic, easy to understand)
     Apriori,
 
-    /// FP-Growth (faster, more memory efficient)
-    #[allow(dead_code)]
+    /// FP-Growth (faster, more memory efficient for dense datasets)
     FPGrowth,
 
     /// Eclat (uses vertical data format)

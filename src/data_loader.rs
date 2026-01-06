@@ -4,16 +4,10 @@
 //! - Excel files (.xlsx) - ultra-low memory streaming
 //! - CSV files (.csv) - memory-efficient streaming
 //!
-//! # Default Format
+//! # Column Mapping (v0.2.0+)
 //!
-//! By default, `from_csv()` and `from_excel()` expect 3 columns:
-//! - **Column 0**: Transaction/Group ID
-//! - **Column 1**: Items (comma-separated values to mine)
-//! - **Column 2**: Timestamp
-//!
-//! # Mining Different Fields (v0.2.0+)
-//!
-//! Use `ColumnMapping` to mine any columns from multi-field data:
+//! All data loading methods require `ColumnMapping` to specify which columns to mine.
+//! This provides full flexibility for any data schema.
 //!
 //! ```no_run
 //! use rust_rule_miner::data_loader::{DataLoader, ColumnMapping};
@@ -21,9 +15,13 @@
 //! // CSV: customer_id, product, category, price, location, timestamp
 //! //      0            1        2         3      4         5
 //!
-//! // Mine product + category combined
+//! // Mine single field (product names from column 1)
+//! let mapping = ColumnMapping::simple(0, 1, 5);
+//! let transactions = DataLoader::from_csv("sales.csv", mapping)?;
+//!
+//! // Mine multiple fields combined (product + category)
 //! let mapping = ColumnMapping::multi_field(0, vec![1, 2], 5, "::".to_string());
-//! let transactions = DataLoader::from_csv_with_mapping("sales.csv", mapping)?;
+//! let transactions = DataLoader::from_csv("sales.csv", mapping)?;
 //! // Items: "Laptop::Electronics", "Mouse::Accessories"
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
@@ -31,13 +29,16 @@
 //! # Example
 //!
 //! ```no_run
-//! use rust_rule_miner::data_loader::DataLoader;
+//! use rust_rule_miner::data_loader::{DataLoader, ColumnMapping};
+//!
+//! // Standard 3-column format: transaction_id, items, timestamp
+//! let mapping = ColumnMapping::simple(0, 1, 2);
 //!
 //! // Load from Excel
-//! let transactions = DataLoader::from_excel("sales_data.xlsx", 0)?;
+//! let transactions = DataLoader::from_excel("sales_data.xlsx", 0, mapping.clone())?;
 //!
 //! // Load from CSV
-//! let transactions = DataLoader::from_csv("transactions.csv")?;
+//! let transactions = DataLoader::from_csv("transactions.csv", mapping)?;
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
@@ -62,18 +63,6 @@ pub struct ColumnMapping {
     pub timestamp: usize,
     /// Separator to combine multiple item columns (default: "::")
     pub field_separator: String,
-}
-
-impl Default for ColumnMapping {
-    /// Default mapping: column 0=transaction_id, 1=items, 2=timestamp
-    fn default() -> Self {
-        Self {
-            transaction_id: 0,
-            item_columns: vec![1],
-            timestamp: 2,
-            field_separator: "::".to_string(),
-        }
-    }
 }
 
 impl ColumnMapping {
@@ -132,221 +121,32 @@ impl ColumnMapping {
 pub struct DataLoader;
 
 impl DataLoader {
-    /// Load transactions from Excel file (.xlsx)
+    /// Load transactions from Excel file (.xlsx) with custom column mapping
     ///
     /// Uses excelstream for high-performance streaming with ~3-35 MB memory usage
     /// regardless of file size.
-    ///
-    /// Expected format:
-    /// - Column 0: Transaction ID
-    /// - Column 1: Items (comma-separated)
-    /// - Column 2: Timestamp (ISO 8601, Unix timestamp, or datetime string)
     ///
     /// First row is treated as header and skipped.
     ///
     /// # Arguments
     /// * `path` - Path to Excel file
     /// * `sheet_index` - Sheet index (0-based) to read
+    /// * `mapping` - Column mapping configuration
     ///
     /// # Returns
     /// Vector of transactions
     ///
     /// # Example
     /// ```no_run
-    /// use rust_rule_miner::data_loader::DataLoader;
+    /// use rust_rule_miner::data_loader::{DataLoader, ColumnMapping};
     ///
-    /// let transactions = DataLoader::from_excel("sales.xlsx", 0)?;
+    /// // Standard format: transaction_id(0), items(1), timestamp(2)
+    /// let mapping = ColumnMapping::simple(0, 1, 2);
+    /// let transactions = DataLoader::from_excel("sales.xlsx", 0, mapping)?;
     /// println!("Loaded {} transactions", transactions.len());
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    pub fn from_excel<P: AsRef<Path>>(path: P, sheet_index: usize) -> Result<Vec<Transaction>> {
-        let mut reader = StreamingReader::open(path.as_ref())
-            .map_err(|e| MiningError::DataLoadError(format!("Failed to open Excel file: {}", e)))?;
-
-        let mut transactions = Vec::new();
-        let mut row_idx = 0;
-
-        for row_result in reader.rows_by_index(sheet_index).map_err(|e| {
-            MiningError::DataLoadError(format!("Failed to read sheet {}: {}", sheet_index, e))
-        })? {
-            let row = row_result.map_err(|e| {
-                MiningError::DataLoadError(format!("Failed to read row {}: {}", row_idx, e))
-            })?;
-
-            row_idx += 1;
-
-            // Skip header row
-            if row_idx == 1 {
-                continue;
-            }
-
-            // Convert row to Vec<String>
-            let row_values = row.to_strings();
-
-            match Self::parse_transaction_from_values(&row_values, row_idx) {
-                Ok(Some(tx)) => transactions.push(tx),
-                Ok(None) => continue, // Skip empty rows
-                Err(e) => {
-                    log::warn!("Skipping row {}: {}", row_idx, e);
-                    continue;
-                }
-            }
-        }
-
-        if transactions.is_empty() {
-            return Err(MiningError::InsufficientData(
-                "No valid transactions found in Excel file".to_string(),
-            ));
-        }
-
-        Ok(transactions)
-    }
-
-    /// Load transactions from CSV file
-    ///
-    /// Uses excelstream for high-performance streaming with constant memory usage.
-    ///
-    /// Expected format:
-    /// ```csv
-    /// transaction_id,items,timestamp
-    /// tx1,"Laptop,Mouse",2024-01-15T10:30:00Z
-    /// tx2,"Phone,Phone Case",2024-01-15T11:00:00Z
-    /// ```
-    ///
-    /// First row is treated as header and skipped.
-    ///
-    /// # Arguments
-    /// * `path` - Path to CSV file
-    ///
-    /// # Returns
-    /// Vector of transactions
-    ///
-    /// # Example
-    /// ```no_run
-    /// use rust_rule_miner::data_loader::DataLoader;
-    ///
-    /// let transactions = DataLoader::from_csv("transactions.csv")?;
-    /// println!("Loaded {} transactions", transactions.len());
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    pub fn from_csv<P: AsRef<Path>>(path: P) -> Result<Vec<Transaction>> {
-        let mut reader = CsvReader::open(path.as_ref())
-            .map_err(|e| MiningError::DataLoadError(format!("Failed to open CSV file: {}", e)))?;
-
-        let mut transactions = Vec::new();
-        let mut row_idx = 0;
-
-        for row_result in reader.rows() {
-            let row = row_result.map_err(|e| {
-                MiningError::DataLoadError(format!("Failed to read row {}: {}", row_idx, e))
-            })?;
-
-            row_idx += 1;
-
-            // Skip header row
-            if row_idx == 1 {
-                continue;
-            }
-
-            // Convert row to Vec<String>
-            let row_values: Vec<String> = row.into_iter().map(|v| v.to_string()).collect();
-
-            match Self::parse_transaction_from_values(&row_values, row_idx) {
-                Ok(Some(tx)) => transactions.push(tx),
-                Ok(None) => continue, // Skip empty rows
-                Err(e) => {
-                    log::warn!("Skipping row {}: {}", row_idx, e);
-                    continue;
-                }
-            }
-        }
-
-        if transactions.is_empty() {
-            return Err(MiningError::InsufficientData(
-                "No valid transactions found in CSV file".to_string(),
-            ));
-        }
-
-        Ok(transactions)
-    }
-
-    /// Load transactions from CSV file with custom column mapping
-    ///
-    /// Allows you to specify which columns to mine from your data.
-    ///
-    /// # Example
-    /// ```no_run
-    /// use rust_rule_miner::data_loader::{DataLoader, ColumnMapping};
-    ///
-    /// // CSV: customer_id, product_name, category, price, location, timestamp
-    /// //      0            1             2         3      4         5
-    ///
-    /// // Mine by product names (column 1)
-    /// let mapping = ColumnMapping::simple(0, 1, 5);
-    /// let transactions = DataLoader::from_csv_with_mapping("sales.csv", mapping)?;
-    ///
-    /// // Mine by product + category combined
-    /// let mapping = ColumnMapping::multi_field(0, vec![1, 2], 5, "::".to_string());
-    /// let transactions = DataLoader::from_csv_with_mapping("sales.csv", mapping)?;
-    /// // Items will be like: "Laptop::Electronics", "Mouse::Accessories"
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    pub fn from_csv_with_mapping<P: AsRef<Path>>(
-        path: P,
-        mapping: ColumnMapping,
-    ) -> Result<Vec<Transaction>> {
-        let mut reader = CsvReader::open(path.as_ref())
-            .map_err(|e| MiningError::DataLoadError(format!("Failed to open CSV file: {}", e)))?;
-
-        let mut transactions = Vec::new();
-        let mut row_idx = 0;
-
-        for row_result in reader.rows() {
-            let row = row_result.map_err(|e| {
-                MiningError::DataLoadError(format!("Failed to read row {}: {}", row_idx, e))
-            })?;
-
-            row_idx += 1;
-
-            // Skip header row
-            if row_idx == 1 {
-                continue;
-            }
-
-            // Convert row to Vec<String>
-            let row_values: Vec<String> = row.into_iter().map(|v| v.to_string()).collect();
-
-            match Self::parse_transaction_with_mapping(&row_values, row_idx, &mapping) {
-                Ok(Some(tx)) => transactions.push(tx),
-                Ok(None) => continue, // Skip empty rows
-                Err(e) => {
-                    log::warn!("Skipping row {}: {}", row_idx, e);
-                    continue;
-                }
-            }
-        }
-
-        if transactions.is_empty() {
-            return Err(MiningError::InsufficientData(
-                "No valid transactions found in CSV file".to_string(),
-            ));
-        }
-
-        Ok(transactions)
-    }
-
-    /// Load transactions from Excel file with custom column mapping
-    ///
-    /// # Example
-    /// ```no_run
-    /// use rust_rule_miner::data_loader::{DataLoader, ColumnMapping};
-    ///
-    /// // Mine by category (column 2) instead of product names
-    /// let mapping = ColumnMapping::simple(0, 2, 5);
-    /// let transactions = DataLoader::from_excel_with_mapping("sales.xlsx", 0, mapping)?;
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    pub fn from_excel_with_mapping<P: AsRef<Path>>(
+    pub fn from_excel<P: AsRef<Path>>(
         path: P,
         sheet_index: usize,
         mapping: ColumnMapping,
@@ -387,6 +187,70 @@ impl DataLoader {
         if transactions.is_empty() {
             return Err(MiningError::InsufficientData(
                 "No valid transactions found in Excel file".to_string(),
+            ));
+        }
+
+        Ok(transactions)
+    }
+
+    /// Load transactions from CSV file with custom column mapping
+    ///
+    /// Uses excelstream for high-performance streaming with constant memory usage.
+    ///
+    /// First row is treated as header and skipped.
+    ///
+    /// # Arguments
+    /// * `path` - Path to CSV file
+    /// * `mapping` - Column mapping configuration
+    ///
+    /// # Returns
+    /// Vector of transactions
+    ///
+    /// # Example
+    /// ```no_run
+    /// use rust_rule_miner::data_loader::{DataLoader, ColumnMapping};
+    ///
+    /// // Standard format: transaction_id(0), items(1), timestamp(2)
+    /// let mapping = ColumnMapping::simple(0, 1, 2);
+    /// let transactions = DataLoader::from_csv("transactions.csv", mapping)?;
+    /// println!("Loaded {} transactions", transactions.len());
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn from_csv<P: AsRef<Path>>(path: P, mapping: ColumnMapping) -> Result<Vec<Transaction>> {
+        let mut reader = CsvReader::open(path.as_ref())
+            .map_err(|e| MiningError::DataLoadError(format!("Failed to open CSV file: {}", e)))?;
+
+        let mut transactions = Vec::new();
+        let mut row_idx = 0;
+
+        for row_result in reader.rows() {
+            let row = row_result.map_err(|e| {
+                MiningError::DataLoadError(format!("Failed to read row {}: {}", row_idx, e))
+            })?;
+
+            row_idx += 1;
+
+            // Skip header row
+            if row_idx == 1 {
+                continue;
+            }
+
+            // Convert row to Vec<String>
+            let row_values: Vec<String> = row.into_iter().map(|v| v.to_string()).collect();
+
+            match Self::parse_transaction_with_mapping(&row_values, row_idx, &mapping) {
+                Ok(Some(tx)) => transactions.push(tx),
+                Ok(None) => continue, // Skip empty rows
+                Err(e) => {
+                    log::warn!("Skipping row {}: {}", row_idx, e);
+                    continue;
+                }
+            }
+        }
+
+        if transactions.is_empty() {
+            return Err(MiningError::InsufficientData(
+                "No valid transactions found in CSV file".to_string(),
             ));
         }
 
@@ -479,42 +343,6 @@ impl DataLoader {
         Ok(Some(Transaction::new(tx_id.to_string(), items, timestamp)))
     }
 
-    /// Parse a row of values into a Transaction
-    pub(crate) fn parse_transaction_from_values(
-        row_values: &[String],
-        row_idx: usize,
-    ) -> Result<Option<Transaction>> {
-        if row_values.len() < 3 {
-            return Err(MiningError::DataLoadError(format!(
-                "Row {} has insufficient columns (expected 3, got {})",
-                row_idx,
-                row_values.len()
-            )));
-        }
-
-        // Column 0: Transaction ID
-        let tx_id = row_values[0].trim();
-        if tx_id.is_empty() {
-            return Ok(None); // Skip empty transaction ID
-        }
-
-        // Column 1: Items (comma-separated)
-        let items: Vec<String> = row_values[1]
-            .split(',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect();
-
-        if items.is_empty() {
-            return Ok(None); // Skip empty transactions
-        }
-
-        // Column 2: Timestamp
-        let timestamp = Self::parse_timestamp(&row_values[2], row_idx)?;
-
-        Ok(Some(Transaction::new(tx_id.to_string(), items, timestamp)))
-    }
-
     /// Parse timestamp from string (supports ISO 8601, Unix timestamp, and common datetime formats)
     fn parse_timestamp(timestamp_str: &str, row_idx: usize) -> Result<DateTime<Utc>> {
         let trimmed = timestamp_str.trim();
@@ -576,19 +404,24 @@ impl DataLoader {
     /// * `key` - S3 object key (file path in bucket)
     /// * `region` - AWS region (e.g., "us-east-1")
     /// * `sheet_index` - Sheet index (0-based) for Excel files
+    /// * `mapping` - Column mapping configuration
     ///
     /// # Example
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// use rust_rule_miner::data_loader::DataLoader;
+    /// use rust_rule_miner::data_loader::{DataLoader, ColumnMapping};
+    ///
+    /// // Standard format: transaction_id(0), items(1), timestamp(2)
+    /// let mapping = ColumnMapping::simple(0, 1, 2);
     ///
     /// // Load from S3
     /// let transactions = DataLoader::from_s3(
     ///     "my-data-bucket",
     ///     "sales/2024/transactions.xlsx",
     ///     "us-east-1",
-    ///     0
+    ///     0,
+    ///     mapping
     /// ).await?;
     ///
     /// println!("Loaded {} transactions from S3", transactions.len());
@@ -601,6 +434,7 @@ impl DataLoader {
         key: &str,
         region: &str,
         sheet_index: usize,
+        mapping: ColumnMapping,
     ) -> Result<Vec<Transaction>> {
         use excelstream::cloud::S3ExcelReader;
 
@@ -632,7 +466,7 @@ impl DataLoader {
             // Convert row to Vec<String>
             let row_values = row.to_strings();
 
-            match Self::parse_transaction_from_values(&row_values, row_idx) {
+            match Self::parse_transaction_with_mapping(&row_values, row_idx, &mapping) {
                 Ok(Some(tx)) => transactions.push(tx),
                 Ok(None) => continue,
                 Err(e) => {
@@ -657,16 +491,21 @@ impl DataLoader {
     ///
     /// # Arguments
     /// * `url` - HTTP URL to CSV file
+    /// * `mapping` - Column mapping configuration
     ///
     /// # Example
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// use rust_rule_miner::data_loader::DataLoader;
+    /// use rust_rule_miner::data_loader::{DataLoader, ColumnMapping};
+    ///
+    /// // Standard format: transaction_id(0), items(1), timestamp(2)
+    /// let mapping = ColumnMapping::simple(0, 1, 2);
     ///
     /// // Load from HTTP endpoint
     /// let transactions = DataLoader::from_http(
-    ///     "https://example.com/data/transactions.csv"
+    ///     "https://example.com/data/transactions.csv",
+    ///     mapping
     /// ).await?;
     ///
     /// println!("Loaded {} transactions from HTTP", transactions.len());
@@ -674,7 +513,7 @@ impl DataLoader {
     /// # }
     /// ```
     #[cfg(feature = "cloud")]
-    pub async fn from_http(url: &str) -> Result<Vec<Transaction>> {
+    pub async fn from_http(url: &str, mapping: ColumnMapping) -> Result<Vec<Transaction>> {
         // Download to temp file first, then use CsvReader
         // (excelstream doesn't have direct HTTP CSV reader yet)
         let response = reqwest::get(url)
@@ -701,7 +540,7 @@ impl DataLoader {
             // Parse CSV row
             let row_values: Vec<String> = line.split(',').map(|s| s.trim().to_string()).collect();
 
-            match Self::parse_transaction_from_values(&row_values, row_idx) {
+            match Self::parse_transaction_with_mapping(&row_values, row_idx, &mapping) {
                 Ok(Some(tx)) => transactions.push(tx),
                 Ok(None) => continue,
                 Err(e) => {
@@ -740,8 +579,9 @@ tx3,"Tablet",2024-01-15T12:00:00Z
         let mut file = fs::File::create(temp_file).unwrap();
         file.write_all(csv_content.as_bytes()).unwrap();
 
-        // Load transactions
-        let transactions = DataLoader::from_csv(temp_file).unwrap();
+        // Load transactions with column mapping
+        let mapping = ColumnMapping::simple(0, 1, 2);
+        let transactions = DataLoader::from_csv(temp_file, mapping).unwrap();
 
         assert_eq!(transactions.len(), 3);
         assert_eq!(transactions[0].id, "tx1");

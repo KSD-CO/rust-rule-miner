@@ -1,4 +1,5 @@
 pub mod apriori;
+pub mod fpgrowth;
 pub mod stats;
 
 use crate::config::MiningConfig;
@@ -64,12 +65,13 @@ impl RuleMiner {
     ///
     /// # Example
     /// ```no_run
-    /// use rust_rule_miner::{RuleMiner, MiningConfig, data_loader::DataLoader};
+    /// use rust_rule_miner::{RuleMiner, MiningConfig, data_loader::{DataLoader, ColumnMapping}};
     ///
     /// let mut miner = RuleMiner::new(MiningConfig::default());
     ///
     /// // Load from CSV and add to miner
-    /// let transactions = DataLoader::from_csv("file.csv")?;
+    /// let mapping = ColumnMapping::simple(0, 1, 2);
+    /// let transactions = DataLoader::from_csv("file.csv", mapping)?;
     /// miner.add_transactions_from_iter(transactions.into_iter().map(Ok))?;
     ///
     /// let rules = miner.mine_association_rules()?;
@@ -112,6 +114,9 @@ impl RuleMiner {
         let frequent_itemsets = match self.config.algorithm {
             crate::config::MiningAlgorithm::Apriori => {
                 apriori::find_frequent_itemsets(&self.transactions, self.config.min_support)?
+            }
+            crate::config::MiningAlgorithm::FPGrowth => {
+                fpgrowth::find_frequent_itemsets(&self.transactions, self.config.min_support)?
             }
             _ => {
                 return Err(MiningError::MiningFailed(
